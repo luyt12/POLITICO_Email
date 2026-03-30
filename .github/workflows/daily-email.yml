@@ -25,6 +25,32 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
-      - run: python rss_parser.py
-      - run: python translate_news.py
-      - run: python send_email.py
+
+      # Step 1: 抓取新闻
+      - name: Fetch RSS news
+        run: python rss_parser.py
+
+      # Step 2: 仅翻译今日的文章
+      - name: Translate today's news
+        run: |
+          TODAY=$(TZ='America/New_York' date +%Y%m%d)
+          FILE="dailynews/${TODAY}.md"
+          if [ -f "\$FILE" ]; then
+            echo "Found: \$FILE"
+            python translate_news.py "\$FILE"
+          else
+            echo "No today's news: \$FILE"
+            ls dailynews/
+          fi
+
+      # Step 3: 仅发送今日的翻译邮件
+      - name: Send today's email
+        run: |
+          TODAY=$(TZ='America/New_York' date +%Y%m%d)
+          FILE="translate/${TODAY}.md"
+          if [ -f "\$FILE" ]; then
+            echo "Found: \$FILE"
+            python send_email.py "\$FILE"
+          else
+            echo "No translated file for today, skipping email"
+          fi
