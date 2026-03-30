@@ -4,6 +4,8 @@ Sends translated POLITICO news to configured email address in HTML format.
 """
 
 import os
+import sys
+import re
 import smtplib
 import ssl
 from datetime import datetime
@@ -11,7 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import markdown
 
-# 直接从环境变量读取（不依赖 .env 文件）
+# 直接从环境变量读取
 EMAIL_TO = os.getenv("EMAIL_TO", "HZ-lu2007@outlook.com")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "kimberagent@163.com")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.163.com")
@@ -119,7 +121,7 @@ def send_daily_email(date_str=None):
     translate_file = os.path.join(TRANSLATE_DIR, f"{date_str}.md")
     
     if not os.path.exists(translate_file):
-        print(f"No translated news found for {date_str}")
+        print(f"No translated news found for {date_str}: {translate_file}")
         return False
     
     with open(translate_file, 'r', encoding='utf-8') as f:
@@ -129,6 +131,8 @@ def send_daily_email(date_str=None):
         print(f"Translated file is empty for {date_str}")
         return False
     
+    print(f"Email content length: {len(content)} chars")
+    
     html_content = format_email_html(content, date_str)
     
     msg = MIMEMultipart()
@@ -136,6 +140,8 @@ def send_daily_email(date_str=None):
     msg['To'] = EMAIL_TO
     msg['Subject'] = f"POLITICO 每日新闻 - {display_date}"
     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+    
+    print(f"SMTP: {SMTP_HOST}:{SMTP_PORT}, User: {SMTP_USER}, Pass set: {bool(SMTP_PASS)}")
     
     try:
         context = ssl.create_default_context()
@@ -152,14 +158,10 @@ def send_daily_email(date_str=None):
 
 
 if __name__ == "__main__":
-    import sys
+    path_arg = sys.argv[1] if len(sys.argv) > 1 else None
     
-    if len(sys.argv) > 1:
-        path_arg = sys.argv[1]
-        # 支持完整路径如 "translate/20260330.md" 或纯日期如 "20260330"
+    if path_arg:
         if path_arg.endswith('.md'):
-            # 提取文件名中的日期
-            import re
             m = re.search(r'(\d{8})', path_arg)
             if m:
                 send_daily_email(m.group(1))
