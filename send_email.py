@@ -9,27 +9,22 @@ import ssl
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
 import markdown
 
-# Load environment variables
-load_dotenv()
-
-# Email configuration
+# 直接从环境变量读取（不依赖 .env 文件）
 EMAIL_TO = os.getenv("EMAIL_TO", "HZ-lu2007@outlook.com")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "kimberagent@163.com")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.163.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SMTP_USER = os.getenv("SMTP_USER", "kimberagent@163.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "KUy32yx8YxKiQww7")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
 
-# Path configuration
 TRANSLATE_DIR = "translate"
 
 
 def format_email_html(content, date_str):
     """Format Markdown content as HTML email with POLITICO red theme"""
-    html_content = markdown.markdown(content, extensions=['tables', 'fenced_code'])
+    html_body = markdown.markdown(content, extensions=['tables', 'fenced_code'])
     display_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
     
     html = f"""<!DOCTYPE html>
@@ -81,12 +76,6 @@ def format_email_html(content, date_str):
         a:hover {{
             text-decoration: underline;
         }}
-        .link {{
-            color: #888;
-            font-size: 13px;
-            margin-bottom: 15px;
-            display: block;
-        }}
         .footer {{
             margin-top: 40px;
             padding-top: 20px;
@@ -109,7 +98,7 @@ def format_email_html(content, date_str):
             <div class="date">{display_date}</div>
         </div>
         <div class="content">
-{html_content}
+{html_body}
         </div>
         <div class="footer">
             此邮件由 OpenClaw Agent 自动发送<br>
@@ -127,7 +116,6 @@ def send_daily_email(date_str=None):
     
     display_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
     
-    # Read translated content
     translate_file = os.path.join(TRANSLATE_DIR, f"{date_str}.md")
     
     if not os.path.exists(translate_file):
@@ -141,19 +129,14 @@ def send_daily_email(date_str=None):
         print(f"Translated file is empty for {date_str}")
         return False
     
-    # Format HTML email
     html_content = format_email_html(content, date_str)
     
-    # Create email (HTML only)
     msg = MIMEMultipart()
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
     msg['Subject'] = f"POLITICO 每日新闻 - {display_date}"
-    
-    # Add HTML content only
     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
     
-    # Send email
     try:
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
