@@ -10,7 +10,7 @@ from datetime import datetime
 # --- 配置日志 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- 配置（直接从环境变量读取，不依赖 .env 文件）---
+# --- 配置（直接从环境变量读取）---
 KIMI_API_KEY = os.getenv("kimi_API_KEY")
 KIMI_MODEL = os.getenv("KIMI_MODEL", "moonshotai/kimi-k2.5")
 KIMI_API_URL = os.getenv("KIMI_API_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
@@ -62,59 +62,58 @@ def translate_with_kimi(content):
     }
     
     max_retries = 5
-    retry_delay = 60
     
     for attempt in range(max_retries):
         try:
-            logging.info(f"发送翻译请求到 Kimi API (尝试 {attempt + 1}/{max_retries})...")
+            logging.info(f"发送翻译请求 (尝试 {attempt + 1}/{max_retries})...")
             logging.info(f"内容长度: {len(content)} 字符")
             
             response = requests.post(
                 KIMI_API_URL,
                 headers=headers,
                 json=data,
-                timeout=600
+                timeout=300
             )
             response.raise_for_status()
             result = response.json()
             
             if "choices" in result and len(result["choices"]) > 0:
-                translated_text = result["choices"][0]["message"]["content"]
-                return translated_text
+                return result["choices"][0]["message"]["content"]
             else:
-                logging.error(f"API 响应中未找到翻译结果: {result}")
+                logging.error(f"API 响应异常: {result}")
                 if attempt < max_retries - 1:
-                    logging.info(f"将在 {retry_delay} 秒后重试...")
-                    time.sleep(retry_delay)
-                else:
-                    logging.error("达到最大重试次数，未能获取翻译结果。")
-                    return None
+                    wait = 30 * (2 ** attempt)
+                    logging.info(f"等待 {wait} 秒后重试...")
+                    time.sleep(wait)
+                    
+        except requests.exceptions.Timeout:
+            logging.error(f"API 请求超时 (尝试 {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                wait = 30 * (2 ** attempt)
+                logging.info(f"等待 {wait} 秒后重试...")
+                time.sleep(wait)
+                
         except requests.exceptions.RequestException as e:
-            logging.error(f"API 请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+            logging.error(f"API 请求失败: {e}")
             if attempt < max_retries - 1:
-                logging.info(f"将在 {retry_delay} 秒后重试...")
-                time.sleep(retry_delay)
-            else:
-                logging.error("达到最大重试次数，API 请求失败。")
-                return None
+                wait = 30 * (2 ** attempt)
+                logging.info(f"等待 {wait} 秒后重试...")
+                time.sleep(wait)
+                
         except Exception as e:
-            logging.error(f"翻译过程中发生未知错误: {e}")
+            logging.error(f"未知错误: {e}")
             if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-            else:
-                return None
+                time.sleep(30)
+                
     return None
 
 def get_latest_md_file(directory):
-    """获取指定目录下最新的 .md 文件"""
     md_files = glob.glob(os.path.join(directory, "*.md"))
     if not md_files:
         return None
-    latest_file = max(md_files, key=os.path.getmtime)
-    return latest_file
+    return max(md_files, key=os.path.getmtime)
 
 def translate_file(input_file_path):
-    """翻译指定的 .md 文件并保存结果"""
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         logging.info(f"创建目录: {OUTPUT_DIR}")
@@ -143,7 +142,6 @@ def translate_file(input_file_path):
         return False
 
 def main():
-    """主函数"""
     if len(sys.argv) > 1:
         input_file = sys.argv[1]
         if not input_file.endswith('.md'):
