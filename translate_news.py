@@ -3,9 +3,7 @@ import sys
 import glob
 import logging
 import requests
-import json
 import time
-from datetime import datetime
 
 # --- 配置日志 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -66,8 +64,6 @@ def translate_with_kimi(content):
     for attempt in range(max_retries):
         try:
             logging.info(f"发送翻译请求 (尝试 {attempt + 1}/{max_retries})...")
-            logging.info(f"内容长度: {len(content)} 字符")
-            
             response = requests.post(
                 KIMI_API_URL,
                 headers=headers,
@@ -107,17 +103,16 @@ def translate_with_kimi(content):
                 
     return None
 
-def get_latest_md_file(directory):
-    md_files = glob.glob(os.path.join(directory, "*.md"))
-    if not md_files:
-        return None
-    return max(md_files, key=os.path.getmtime)
-
 def translate_file(input_file_path):
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-        logging.info(f"创建目录: {OUTPUT_DIR}")
+    """翻译指定的 .md 文件并保存结果"""
+    if not os.path.exists(input_file_path):
+        logging.error(f"文件不存在: {input_file_path}")
+        return False
     
+    # 确保输出目录存在
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
+    # 从输入文件名获取输出文件名
     filename = os.path.basename(input_file_path)
     output_file_path = os.path.join(OUTPUT_DIR, filename)
     
@@ -127,6 +122,7 @@ def translate_file(input_file_path):
         with open(input_file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
+        logging.info(f"内容长度: {len(content)} 字符")
         translated_content = translate_with_kimi(content)
         
         if translated_content:
@@ -142,15 +138,27 @@ def translate_file(input_file_path):
         return False
 
 def main():
+    """主函数"""
     if len(sys.argv) > 1:
+        # 支持完整路径，如 "dailynews/20260330.md" 或 "20260330.md"
         input_file = sys.argv[1]
         if not input_file.endswith('.md'):
             input_file += '.md'
-        input_file_path = os.path.join(INPUT_DIR, input_file)
+        
+        # 如果包含路径分隔符，直接使用
+        if os.path.sep in input_file or '/' in input_file or '\\' in input_file:
+            input_file_path = input_file
+        else:
+            input_file_path = os.path.join(INPUT_DIR, input_file)
     else:
-        input_file_path = get_latest_md_file(INPUT_DIR)
+        # 否则找最新的文件
+        md_files = glob.glob(os.path.join(INPUT_DIR, "*.md"))
+        if not md_files:
+            logging.error("找不到任何 .md 文件")
+            sys.exit(1)
+        input_file_path = max(md_files, key=os.path.getmtime)
     
-    if not input_file_path or not os.path.exists(input_file_path):
+    if not os.path.exists(input_file_path):
         logging.error(f"找不到要翻译的文件: {input_file_path}")
         sys.exit(1)
     
