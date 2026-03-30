@@ -1,0 +1,30 @@
+name: Daily POLITICO News Email
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 03:00 UTC = 22:00 EST
+  workflow_dispatch:
+
+env:
+  KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+  KIMI_MODEL: moonshotai/kimi-k2.5
+  KIMI_API_URL: https://integrate.api.nvidia.com/v1/chat/completions
+  EMAIL_TO: HZ-lu2007@outlook.com
+  EMAIL_FROM: kimberagent@163.com
+  SMTP_HOST: smtp.163.com
+  SMTP_PORT: 465
+  SMTP_USER: kimberagent@163.com
+  SMTP_PASS: ${{ secrets.SMTP_PASS }}
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python rss_parser.py
+      - run: python translate_news.py
+      - run: python send_email.py
