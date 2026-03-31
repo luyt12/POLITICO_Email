@@ -6,12 +6,17 @@ from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-EMAIL_TO = os.getenv("EMAIL_TO", "HZ-lu2007@outlook.com")
-EMAIL_FROM = os.getenv("EMAIL_FROM", "kimberagent@163.com")
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.163.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
-SMTP_USER = os.getenv("SMTP_USER", "kimberagent@163.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
+EMAIL_TO = os.getenv("EMAIL_TO") or ""
+EMAIL_FROM = os.getenv("EMAIL_FROM") or ""
+SMTP_HOST = os.getenv("SMTP_HOST") or ""
+SMTP_PORT = int(os.getenv("SMTP_PORT") or "465")
+SMTP_USER = os.getenv("SMTP_USER") or ""
+SMTP_PASS = os.getenv("SMTP_PASS") or ""
+
+_missing = [k for k, v in {"EMAIL_TO": EMAIL_TO, "EMAIL_FROM": EMAIL_FROM, "SMTP_HOST": SMTP_HOST, "SMTP_USER": SMTP_USER, "SMTP_PASS": SMTP_PASS}.items() if not v]
+if _missing:
+    print("ERROR: Missing required env vars: " + ", ".join(_missing))
+    sys.exit(1)
 TRANSLATE_DIR = "translate"
 
 
