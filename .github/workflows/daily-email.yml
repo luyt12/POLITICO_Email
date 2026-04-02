@@ -9,37 +9,28 @@ env:
   kimi_API_KEY: ${{ secrets.KIMI_API_KEY }}
   KIMI_MODEL: moonshotai/kimi-k2.5
   KIMI_API_URL: https://integrate.api.nvidia.com/v1/chat/completions
-  EMAIL_TO: ${{ secrets.EMAIL_TO }}
-  EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-  SMTP_HOST: ${{ secrets.SMTP_HOST }}
-  SMTP_PORT: ${{ secrets.SMTP_PORT }}
-  SMTP_USER: ${{ secrets.SMTP_USER }}
+  EMAIL_TO: HZ-lu2007@outlook.com
+  EMAIL_FROM: kimberagent@163.com
+  SMTP_HOST: smtp.163.com
+  SMTP_PORT: 465
+  SMTP_USER: kimberagent@163.com
   SMTP_PASS: ${{ secrets.SMTP_PASS }}
 
 jobs:
   send-email:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
+      - run: pip install -r requirements.txt
       - name: Run daily task
         run: python daily_task.py
-
-      - name: Upload artifacts (for debugging)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: daily-news-files
-          path: |
-            dailynews/*.md
-            translate/*.md
-          retention-days: 7
+      - name: Commit processed_urls.json
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add processed_urls.json dailynews/
+          git diff --staged --quiet || git commit -m "Update processed URLs [skip ci]"
+          git push
