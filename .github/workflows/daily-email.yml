@@ -10,6 +10,11 @@ on:
         required: false
         default: 'latest'
         type: string
+      backfill_days:
+        description: 'Backfill days (only for backfill mode)'
+        required: false
+        default: '4'
+        type: string
 
 env:
   kimi_API_KEY: ${{ secrets.KIMI_API_KEY }}
@@ -33,6 +38,9 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - name: Run daily task
+        env:
+          MODE: ${{ github.event.inputs.mode || 'latest' }}
+          BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '4' }}
         run: python daily_task.py
       - name: Commit updates
         run: |
