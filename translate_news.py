@@ -2,12 +2,6 @@
 POLITICO EU News Translator
 逐篇翻译：每篇独立保存到 translate/ 目录。
 使用百度翻译 API（大模型文本翻译），API Key 鉴权。
-
-错误分类：
-- AUTH_FAILED (52001-52003): 直接中止，不重试
-- QUOTA_EXCEEDED (54000): 直接中止，提示充值
-- RATE_LIMITED (54003): 等1秒，重试1次
-- NETWORK_ERROR: 等2秒，重试2次
 """
 import os
 import sys
@@ -31,47 +25,16 @@ BAIDU_API_URL = "https://fanyi-api.baidu.com/ait/api/aiTextTranslate"
 INPUT_DIR = "dailynews"
 OUTPUT_DIR = "translate"
 
-# 百度错误码分类
-BAIDU_AUTH_ERRORS = {"52001", "52002", "52003"}  # API key 问题，不重试
-BAIDU_QUOTA_ERROR = "54000"  # 余额不足，不重试
-BAIDU_RATE_LIMIT = "54003"   # 速率限制，等1秒重试1次
+# 百度错误码
+BAIDU_AUTH_ERRORS = {"52001", "52002", "52003"}
+BAIDU_QUOTA_ERROR = "54000"
+BAIDU_RATE_LIMIT = "54003"
 
 
-def check_baidu_auth():
-    """
-    预检查百度 API 有效性。
-    """
-    if not BAIDU_API_KEY:
-        return False, "BAIDU_API_KEY 未设置"
-    if not BAIDU_APPID:
-        return False, "BAIDU_APPID 未设置"
-
-    try:
-        resp = requests.post(
-            BAIDU_API_URL,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {BAIDU_API_KEY}"
-            },
-            json={"appid": BAIDU_APPID, "q": "test", "from": "en", "to": "zh"},
-            timeout=10
-        )
-        data = resp.json()
-
-        error_code = str(data.get("error_code", ""))
-        if error_code in BAIDU_AUTH_ERRORS:
-            return False, f"API key 无效 (错误码: {error_code})"
-        if error_code == BAIDU_QUOTA_ERROR:
-            return False, "百度翻译余额不足"
-
-        return True, "API 有效"
-    except Exception as e:
-        return False, f"网络错误: {e}"
-
-
-def baidu_translate(text, retry_on_rate_limit=True):
+def baidu_translate(text):
     """
     百度翻译 API（大模型文本翻译）。
+    返回: (translated_text, should_abort)
     """
     if not BAIDU_API_KEY:
         logging.error("[BAIDU] BAIDU_API_KEY 未设置")
@@ -101,10 +64,11 @@ def baidu_translate(text, retry_on_rate_limit=True):
                     "from": "en",
                     "to": "zh"
                 },
-                timeout=30
+                timeout=60
             )
             data = resp.json()
 
+            # 检查错误
             error_code = str(data.get("error_code", ""))
             if error_code:
                 error_msg = data.get("error_msg", "未知错误")
@@ -118,7 +82,7 @@ def baidu_translate(text, retry_on_rate_limit=True):
                     return None, True
 
                 if error_code == BAIDU_RATE_LIMIT:
-                    if retry_on_rate_limit and attempt == 0:
+                    if attempt == 0:
                         logging.warning("[BAIDU] 速率限制，等待1秒后重试...")
                         time.sleep(1)
                         continue
@@ -127,13 +91,17 @@ def baidu_translate(text, retry_on_rate_limit=True):
                 logging.warning(f"[BAIDU] API 错误 ({error_code}): {error_msg}")
                 return None, False
 
-            trans = (data.get("data") or {}).get("trans_result", "")
-            if trans:
-                logging.info(f"[BAIDU] 翻译成功 ({len(trans)} 字符)")
-                return trans, False
-            else:
-                logging.warning("[BAIDU] 响应中无翻译结果")
-                return None, False
+            # 成功响应：直接从 trans_result 提取
+            trans_result = data.get("trans_result", [])
+            if trans_result and isinstance(trans_result, list):
+                # 合并所有翻译片段
+                translated = "\n".join([item.get("dst", "") for item in trans_result if isinstance(item, dict)])
+                if translated:
+                    logging.info(f"[BAIDU] 翻译成功 ({len(translated)} 字符)")
+                    return translated, False
+
+            logging.warning("[BAIDU] 响应中无翻译结果")
+            return None, False
 
         except requests.exceptions.Timeout:
             logging.warning(f"[BAIDU] 请求超时 (attempt {attempt+1}/{max_attempts})")
@@ -185,15 +153,8 @@ def translate_article(filepath):
 
     logging.info(f"发现 {len(articles)} 篇文章")
 
-    ok, msg = check_baidu_auth()
-    if not ok:
-        logging.error(f"[BAIDU] 预检查失败: {msg}")
-        return None
-    logging.info(f"[BAIDU] 预检查通过: {msg}")
-
     translated = []
     failed_count = 0
-    max_consecutive_failures = 3
 
     for idx, article in enumerate(articles):
         title_m = re.search(r"^## (.+)", article)
@@ -209,8 +170,8 @@ def translate_article(filepath):
         if result is None:
             failed_count += 1
             logging.warning(f"[{idx+1}] 翻译失败，跳过")
-            if failed_count >= max_consecutive_failures:
-                logging.error(f"连续失败 {max_consecutive_failures} 次，中止任务")
+            if failed_count >= 3:
+                logging.error("连续失败 3 次，中止任务")
                 break
             continue
         else:
